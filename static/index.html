@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SteamReviewHub V14.7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2/dist/echarts-wordcloud.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        body { background-color: #0b0c15; color: #e2e8f0; font-family: 'Noto Sans SC', sans-serif; overflow-x: hidden; }
+        .code-font { font-family: 'JetBrains Mono', monospace; }
+        .grid-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-image: linear-gradient(rgba(30, 41, 59, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(30, 41, 59, 0.3) 1px, transparent 1px); background-size: 30px 30px; z-index: -1; }
+        .glass-panel { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: 0 0 25px rgba(0,0,0,0.6); transition: all 0.3s ease; }
+        
+        select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 0.8rem center; background-size: 1em; cursor: pointer; }
+        select option { background-color: #1e293b; color: #e2e8f0; padding: 12px; }
+        input[type=number] { -moz-appearance: textfield; } input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .toggle-checkbox:checked { right: 0; border-color: #10b981; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #10b981; }
+        .chart-container { height: 350px; width: 100%; }
+        #logs::-webkit-scrollbar { width: 6px; }
+        #logs::-webkit-scrollbar-track { background: #0f172a; }
+        #logs::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        .vs-pulse { animation: pulse-vs 2s infinite; }
+        @keyframes pulse-vs { 0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(244, 63, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); } }
+        
+        .particle { position: absolute; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; animation: particle-fly 0.6s ease-out forwards; z-index: 9999; }
+        @keyframes particle-fly { 0% { opacity: 1; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); } }
+        .hover-glow:hover { text-shadow: 0 0 8px rgba(34, 211, 238, 0.8); }
+        
+        .topic-card { 
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+            border: 1px solid rgba(56, 189, 248, 0.15); 
+            border-radius: 12px; 
+            padding: 14px; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden;
+        }
+        .topic-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5), transparent); }
+        .topic-card:hover { transform: translateY(-3px); border-color: rgba(56, 189, 248, 0.5); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .topic-keyword { 
+            display: inline-block; padding: 4px 8px; margin: 3px; 
+            background: rgba(34, 211, 238, 0.1); 
+            border: 1px solid rgba(34, 211, 238, 0.2);
+            border-radius: 20px; 
+            font-size: 11px; color: #a5f3fc; font-weight: 500;
+        }
+
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #38bdf8; cursor: pointer; margin-top: -5px; box-shadow: 0 0 8px rgba(56, 189, 248, 0.8); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #334155; border-radius: 2px; }
+        
+        /* --- PDF 模板专用样式 (V14.7 修复) --- */
+        #pdf-template { 
+            position: absolute; top: -9999px; left: -9999px; width: 794px; /* A4 */
+            background: white; color: #1e293b; padding: 40px; font-family: 'Noto Sans SC', sans-serif;
+        }
+        .report-section { margin-bottom: 20px; }
+        /* 核心修复：移除 max-height，使用 width:100% 和 height:auto 保持比例 */
+        .report-img { width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 4px; margin-bottom: 10px; display: block; }
+        .report-title { font-size: 16px; font-weight: bold; color: #1e3a8a; border-left: 4px solid #3b82f6; padding-left: 10px; margin: 20px 0 10px 0; }
+        .report-text { font-size: 12px; line-height: 1.6; color: #475569; }
+        
+        .pdf-lda-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
+        .pdf-lda-table th { background: #f1f5f9; color: #334155; padding: 8px; border: 1px solid #cbd5e1; text-align: left; }
+        .pdf-lda-table td { padding: 8px; border: 1px solid #cbd5e1; color: #475569; vertical-align: top; }
+        .pdf-lda-kw { display: inline-block; margin-right: 5px; color: #0284c7; font-weight: 500; }
+        
+        /* 核心修复：使用 flex 布局实现垂直居中 */
+        .lang-badge { 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center;
+            height: 24px;
+            padding: 0 8px; 
+            border-radius: 4px; 
+            color: white; 
+            font-weight: bold; 
+            font-size: 10px; 
+            margin-bottom: 8px;
+            line-height: 1; /* 重置行高 */
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="grid-bg"></div>
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <header class="flex justify-between items-end border-b border-slate-800 pb-4">
+            <div>
+                <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 neon-text code-font">SteamReviewHub V14.7</h1>
+                <p class="text-xs text-slate-500 mt-2 tracking-widest">Author:shinve (Vibe Coding)</p>
+            </div>
+            <div class="text-right flex items-center gap-2 text-xs text-green-400 code-font">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> SYSTEM ONLINE
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-1 space-y-6">
+                <div class="glass-panel p-6 rounded-xl space-y-5">
+                    <div>
+                        <label class="text-xs text-cyan-500 font-bold mb-2 block">1. 目标锁定</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="searchInput" placeholder="输入游戏英文名..." class="w-full bg-slate-900/80 border border-slate-700 text-sm px-3 py-3 rounded-lg text-white outline-none focus:border-cyan-500 transition">
+                            <button onclick="searchGame()" class="bg-cyan-900/50 border border-cyan-700 hover:bg-cyan-800 text-cyan-400 px-4 rounded-lg transition"><i class="fas fa-search"></i></button>
+                        </div>
+                        <div class="flex items-center justify-between mt-3 bg-slate-800/50 p-2 rounded-lg border border-slate-700/50 relative">
+                            <div class="flex items-center gap-2 overflow-hidden w-full cursor-pointer select-none" onclick="manualSwitch(event)">
+                                <i class="fas fa-fire-alt text-orange-500 animate-pulse"></i>
+                                <span class="text-[10px] text-slate-400 whitespace-nowrap">热门:</span>
+                                <span id="trendingText" class="text-xs text-cyan-300 font-bold truncate hover:text-cyan-100 transition">Black Myth: Wukong</span>
+                            </div>
+                            <button onclick="applyTrending()" class="text-[10px] bg-slate-700 hover:bg-blue-600 text-white px-3 py-1 rounded transition flex items-center gap-1 ml-2 shadow-lg shrink-0" title="填入并搜索">
+                                <i class="fas fa-bolt text-yellow-300"></i> 填入
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="gameCard" class="hidden flex items-center gap-3 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                        <img id="gameImg" src="" class="w-14 h-14 rounded object-cover">
+                        <div><h3 id="gameName" class="font-bold text-sm text-white truncate"></h3><p class="text-[10px] text-slate-400 code-font">ID: <span id="gameId"></span></p></div>
+                    </div>
+
+                    <div class="border-t border-slate-700/50 pt-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <label class="text-xs text-slate-400 font-bold block">2. 分析模式</label>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] text-slate-500 transition-colors duration-300" id="modeLabel">单语言模式</span>
+                                <div class="relative inline-block w-9 align-middle select-none">
+                                    <input type="checkbox" id="battleModeToggle" onchange="toggleBattleMode()" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700 transition-all duration-300"/>
+                                    <label for="battleModeToggle" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-700 cursor-pointer"></label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="relative group">
+                                <div class="absolute left-0 top-0 bottom-0 w-1 bg-rose-500 rounded-l"></div>
+                                <select id="langSelectA" class="w-full bg-slate-900/80 border border-slate-700 text-xs pl-4 pr-8 py-3 rounded-lg text-slate-300 outline-none focus:border-rose-500 transition">
+                                    <option value="schinese">简体中文 (CN)</option><option value="tchinese">繁体中文 (TC)</option>
+                                    <option value="english">英语 (EN)</option><option value="japanese">日语 (JP)</option>
+                                    <option value="koreana">韩语 (KR)</option><option value="russian">俄语 (RU)</option>
+                                    <option value="german">德语 (DE)</option><option value="french">法语 (FR)</option>
+                                    <option value="spanish">西语 (ES)</option><option value="portuguese">葡语 (PT)</option>
+                                    <option value="thai">泰语 (TH)</option><option value="vietnamese">越南 (VN)</option>
+                                </select>
+                            </div>
+                            
+                            <div id="vsContainer" class="hidden relative h-6 flex items-center justify-center">
+                                <div class="absolute w-full h-[1px] bg-slate-700/50"></div>
+                                <div class="relative z-10 bg-slate-900 border border-rose-500 text-rose-500 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg vs-pulse">VS</div>
+                            </div>
+
+                            <div id="langBContainer" class="hidden relative group animate-fade-in">
+                                <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-l"></div>
+                                <select id="langSelectB" class="w-full bg-slate-900/80 border border-slate-700 text-xs pl-4 pr-8 py-3 rounded-lg text-slate-300 outline-none focus:border-blue-500 transition">
+                                    <option value="english" selected>英语 (EN)</option><option value="schinese">简体中文 (CN)</option>
+                                    <option value="tchinese">繁体中文 (TC)</option><option value="japanese">日语 (JP)</option>
+                                    <option value="koreana">韩语 (KR)</option><option value="russian">俄语 (RU)</option>
+                                    <option value="german">德语 (DE)</option><option value="french">法语 (FR)</option>
+                                    <option value="spanish">西语 (ES)</option><option value="portuguese">葡语 (PT)</option>
+                                    <option value="thai">泰语 (TH)</option><option value="vietnamese">越南 (VN)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs text-slate-400 mb-2 block">3. 深度挖掘 (LDA)</label>
+                        <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] text-slate-400">智能优选主题 (Auto-K)</span>
+                                <div class="relative inline-block w-8 align-middle select-none">
+                                    <input type="checkbox" id="ldaAutoToggle" onchange="toggleLdaSetting()" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700"/>
+                                    <label for="ldaAutoToggle" class="toggle-label block overflow-hidden h-4 rounded-full bg-slate-700 cursor-pointer"></label>
+                                </div>
+                            </div>
+                            <div id="ldaManualBox" class="flex items-center gap-2 transition-opacity">
+                                <span class="text-[10px] text-slate-400">手动: <span id="ldaKVal" class="text-cyan-400">5</span></span>
+                                <input type="range" id="ldaKSlider" min="2" max="8" value="5" oninput="document.getElementById('ldaKVal').innerText=this.value" class="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">4. 采集上限</label>
+                        <div class="flex items-center bg-slate-900/80 border border-slate-700 rounded-lg overflow-hidden">
+                            <button onclick="adjustCount(-100)" class="px-4 py-3 text-slate-400 hover:text-white border-r border-slate-700/50 active:bg-slate-700"><i class="fas fa-minus text-xs"></i></button>
+                            <input type="number" id="countInput" value="500" class="w-full bg-transparent text-center text-sm text-white outline-none font-bold py-2">
+                            <button onclick="adjustCount(100)" class="px-4 py-3 text-slate-400 hover:text-white border-l border-slate-700/50 active:bg-slate-700"><i class="fas fa-plus text-xs"></i></button>
+                        </div>
+                    </div>
+
+                    <button onclick="startScrape()" id="startBtn" class="w-full bg-gradient-to-r from-rose-600 to-blue-600 hover:from-rose-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all text-sm tracking-wider transform active:scale-95">
+                        <i class="fas fa-bolt mr-2"></i> 启动全维分析
+                    </button>
+                </div>
+
+                <div class="glass-panel p-4 rounded-xl h-48 flex flex-col">
+                    <div class="text-[10px] text-slate-500 mb-2 border-b border-slate-800 pb-1 flex justify-between"><span>SYSTEM LOGS</span><i class="fas fa-terminal text-green-500 animate-pulse"></i></div>
+                    <div id="logs" class="flex-1 overflow-y-auto code-font text-xs space-y-2 text-slate-400 pr-2"><p>> 采集引擎准备就绪...</p></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 space-y-6">
+                
+                <div id="placeholder" class="glass-panel h-full rounded-xl flex items-center justify-center flex-col text-slate-600 space-y-4 min-h-[600px]">
+                    <i class="fas fa-globe-asia text-7xl opacity-20 animate-pulse"></i>
+                    <p id="placeholderText" class="text-sm tracking-widest">等待数据流接入...</p>
+                </div>
+
+                <div id="dashboard" class="hidden space-y-6 pb-10">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="glass-panel p-4 rounded-xl border-t-2 border-rose-500 relative">
+                            <p class="text-xs text-rose-400 font-bold mb-2" id="labelA">Language A</p>
+                            <div class="flex justify-between items-end">
+                                <div><p class="text-[10px] text-slate-400">样本量</p><p id="countA" class="text-xl font-bold text-white">0</p></div>
+                                <div><p class="text-[10px] text-slate-400">情感分</p><p id="scoreA" class="text-xl font-bold text-rose-400">0.0</p></div>
+                            </div>
+                            <div id="timeA" class="mt-3 pt-2 border-t border-slate-700/50 flex justify-between items-center text-[10px] text-slate-400 hidden">
+                                <span><i class="fas fa-clock mr-1"></i>平均时长</span><span class="font-bold text-white code-font" id="valTimeA">0h</span>
+                            </div>
+                        </div>
+                        
+                        <div id="cardPlaytime" class="glass-panel p-4 rounded-xl border-t-2 border-green-500 flex flex-col justify-between">
+                            <div class="flex justify-between items-start">
+                                <p class="text-xs text-green-400 font-bold">平均游玩时长</p><i class="fas fa-clock text-xl text-green-500/20"></i>
+                            </div>
+                            <div class="flex justify-between items-baseline mt-2">
+                                <p id="avgPlaytime" class="text-3xl font-bold text-white code-font">0.0h</p><p class="text-[10px] text-slate-500">Hours Played</p>
+                            </div>
+                        </div>
+
+                        <div id="cardB" class="glass-panel p-4 rounded-xl border-t-2 border-blue-500 hidden relative">
+                            <p class="text-xs text-blue-400 font-bold mb-2" id="labelB">Language B</p>
+                            <div class="flex justify-between items-end">
+                                <div><p class="text-[10px] text-slate-400">样本量</p><p id="countB" class="text-xl font-bold text-white">0</p></div>
+                                <div><p class="text-[10px] text-slate-400">情感分</p><p id="scoreB" class="text-xl font-bold text-blue-400">0.0</p></div>
+                            </div>
+                            <div id="timeB" class="mt-3 pt-2 border-t border-slate-700/50 flex justify-between items-center text-[10px] text-slate-400">
+                                <span><i class="fas fa-clock mr-1"></i>平均时长</span><span class="font-bold text-white code-font" id="valTimeB">0h</span>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-2 rounded-xl flex flex-col gap-2 justify-center" data-html2canvas-ignore>
+                            <button onclick="downloadCSV()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs py-1.5 rounded flex items-center justify-center gap-2 transition"><i class="fas fa-file-csv text-green-400"></i> 导出 CSV源数据</button>
+                            <button onclick="generateSmartPDF()" class="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 text-white text-xs py-1.5 rounded flex items-center justify-center gap-2 transition shadow-lg"><i class="fas fa-file-pdf"></i> 导出 PDF报告</button>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-xl">
+                        <div class="flex justify-between items-center mb-4">
+                            <p class="text-xs text-cyan-400 font-bold flex items-center gap-2">
+                                <i class="fas fa-chart-line"></i> 舆情演化趋势
+                                <i class="fas fa-info-circle text-slate-600 hover:text-cyan-400 cursor-help transition" title="基于 NLP 情感分析引擎&#10;情感分范围：0 (极负) ~ 1 (极正)&#10;>0.6 视为正面，<0.4 视为负面"></i>
+                            </p>
+                            <span class="text-[10px] text-slate-500">支持缩放与导出</span>
+                        </div>
+                        <div id="trendChart" class="chart-container"></div>
+                    </div>
+
+                    <div id="analysisGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="glass-panel p-5 rounded-xl">
+                            <p class="text-xs text-rose-400 font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-comment-dots"></i> <span id="cloudTitleA">核心议题 A</span>
+                                <i class="fas fa-info-circle text-slate-600 hover:text-rose-400 cursor-help transition" title="基于 TF-IDF 算法提取高权重关键词&#10;字体越大代表议题关注度越高&#10;已自动过滤无意义的通用词汇"></i>
+                            </p>
+                            <div id="wordChartA" class="chart-container"></div>
+                        </div>
+
+                        <div id="containerSentimentSingle" class="glass-panel p-5 rounded-xl">
+                            <p class="text-xs text-green-500 font-bold mb-4 flex items-center gap-2"><i class="fas fa-pie-chart"></i> 情感倾向分布</p>
+                            <div id="sentimentChartSingle" class="chart-container"></div>
+                        </div>
+
+                        <div id="containerCloudB" class="glass-panel p-5 rounded-xl hidden">
+                            <p class="text-xs text-blue-400 font-bold mb-4 flex items-center gap-2">
+                                <i class="fas fa-comment-dots"></i> <span id="cloudTitleB">核心议题 B</span>
+                                <i class="fas fa-info-circle text-slate-600 hover:text-blue-400 cursor-help transition" title="基于 TF-IDF 算法提取高权重关键词&#10;字体越大代表议题关注度越高"></i>
+                            </p>
+                            <div id="wordChartB" class="chart-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="containerSentimentBattle" class="glass-panel p-5 rounded-xl hidden">
+                        <p class="text-xs text-slate-400 font-bold mb-4"><i class="fas fa-balance-scale"></i> 跨语言情感对比</p>
+                        <div id="sentimentChartBattle" class="chart-container"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="glass-panel p-5 rounded-xl border-t-2 border-rose-500/50">
+                            <div class="flex justify-between items-center mb-4">
+                                <p class="text-xs text-rose-400 font-bold flex items-center gap-2">
+                                    <i class="fas fa-brain"></i> <span id="ldaTitleA">LDA 议题 (A)</span>
+                                    <i class="fas fa-info-circle text-slate-600 hover:text-purple-400 cursor-help transition" title="基于 LDA 算法自动聚类，发现评论中隐含的核心讨论方向"></i>
+                                </p>
+                                <button onclick="downloadDiv('ldaContainerA')" class="text-slate-500 hover:text-white transition"><i class="fas fa-camera"></i></button>
+                            </div>
+                            <div id="ldaContainerA" class="grid grid-cols-2 gap-3"></div>
+                        </div>
+                        <div id="ldaPanelB" class="glass-panel p-5 rounded-xl border-t-2 border-blue-500/50 hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <p class="text-xs text-blue-400 font-bold flex items-center gap-2">
+                                    <i class="fas fa-brain"></i> <span id="ldaTitleB">LDA 议题 (B)</span>
+                                    <i class="fas fa-info-circle text-slate-600 hover:text-purple-400 cursor-help transition" title="基于 LDA 算法自动聚类，发现评论中隐含的核心讨论方向"></i>
+                                </p>
+                                <button onclick="downloadDiv('ldaContainerB')" class="text-slate-500 hover:text-white transition"><i class="fas fa-camera"></i></button>
+                            </div>
+                            <div id="ldaContainerB" class="grid grid-cols-2 gap-3"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        
+        <div id="pdf-template">
+            <div class="report-section" style="border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
+                <h1 style="font-size: 28px; color: #1e3a8a; margin: 0;">NEXUS 舆情分析报告</h1>
+                <p style="font-size: 14px; color: #64748b;" id="rpt-date">Date: 2025</p>
+            </div>
+            
+            <div class="report-section">
+                <div class="report-title">1. 分析概况 (Summary)</div>
+                <p class="report-text" id="rpt-summary">Loading...</p>
+            </div>
+            
+            <div class="report-section">
+                <div class="report-title">2. 情感与热度趋势 (Trends)</div>
+                <img id="rpt-img-trend" class="report-img" />
+            </div>
+            
+            <div class="report-section">
+                <div class="report-title">3. 核心议题 (Keywords)</div>
+                <div style="display: flex; gap: 20px;">
+                    <div style="width: 50%;">
+                        <p id="rpt-title-a" style="font-weight: bold; color: #e11d48; font-size: 14px; margin-bottom: 5px;">Lang A</p>
+                        <img id="rpt-img-cloud-a" class="report-img" />
+                    </div>
+                    <div style="width: 50%; display: none;" id="rpt-col-b">
+                        <p id="rpt-title-b" style="font-weight: bold; color: #2563eb; font-size: 14px; margin-bottom: 5px;">Lang B</p>
+                        <img id="rpt-img-cloud-b" class="report-img" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-section">
+                <div class="report-title">4. 情感分布 (Sentiment)</div>
+                <img id="rpt-img-sentiment" class="report-img" />
+            </div>
+
+            <div class="report-section">
+                <div class="report-title">5. 潜在议题挖掘 (LDA Topics)</div>
+                <div style="display: flex; gap: 20px;">
+                    <div style="width: 100%;" id="rpt-lda-box-a">
+                        <p id="rpt-lda-title-a" class="lang-badge" style="background:#e11d48">Lang A</p>
+                        <table class="pdf-lda-table" id="rpt-lda-table-a"></table>
+                    </div>
+                    <div style="width: 50%; display: none;" id="rpt-lda-box-b">
+                        <p id="rpt-lda-title-b" class="lang-badge" style="background:#2563eb">Lang B</p>
+                        <table class="pdf-lda-table" id="rpt-lda-table-b"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentGameId = null, isBattleMode = false;
+        let scrapedDataA=[], scrapedDataB=[], analysisDataA=null, analysisDataB=null;
+        let chartInstances = {};
+        
+        const LANG_MAP = {'schinese':'简体中文','tchinese':'繁体中文','english':'英语','japanese':'日语','koreana':'韩语','russian':'俄语','german':'德语','french':'法语','spanish':'西语','portuguese':'葡语','thai':'泰语','vietnamese':'越南'};
+        const TRENDS = ["Black Myth: Wukong", "Elden Ring", "Cyberpunk 2077", "Monster Hunter"];
+        let trendIdx = 0, rotateInt = null;
+
+        function addLog(msg, type='normal') {
+            const logBox = document.getElementById('logs');
+            const color = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-green-400' : 'text-slate-400');
+            logBox.innerHTML += `<p class="${color}"><span class="opacity-30">[${new Date().toLocaleTimeString('zh-CN',{hour12:false})}]</span> ${msg}</p>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // --- 核心修复：智能分页 + 比例自适应 ---
+        function renderLdaToTable(topics) {
+            if(!topics || topics.length === 0) return "<tr><td>无数据</td></tr>";
+            let html = `<tr><th width="20%">议题</th><th>核心关键词 (Keywords)</th></tr>`;
+            topics.forEach((t, i) => {
+                let kws = t.keywords.map(k => `<span class="pdf-lda-kw">${k}</span>`).join(' ');
+                html += `<tr><td><b>Topic #${i+1}</b></td><td>${kws}</td></tr>`;
+            });
+            return html;
+        }
+
+        async function generateSmartPDF() {
+            addLog("启动智能分页引擎...", "normal");
+            const template = document.getElementById('pdf-template');
+            
+            // 1. 填充数据
+            document.getElementById('rpt-date').innerText = new Date().toLocaleString();
+            const game = document.getElementById('gameName').innerText;
+            const langA = LANG_MAP[document.getElementById('langSelectA').value];
+            let summary = `分析对象: ${game}\n[${langA}] 样本:${document.getElementById('countA').innerText}, 情感:${document.getElementById('scoreA').innerText}`;
+            
+            document.getElementById('rpt-title-a').innerText = langA;
+            document.getElementById('rpt-lda-title-a').innerText = langA;
+            document.getElementById('rpt-lda-table-a').innerHTML = renderLdaToTable(analysisDataA.lda_topics);
+            
+            document.getElementById('rpt-img-trend').src = chartInstances['trendChart'].getDataURL();
+            document.getElementById('rpt-img-cloud-a').src = chartInstances['wordChartA'].getDataURL();
+            const sentId = isBattleMode ? 'sentimentChartBattle' : 'sentimentChartSingle';
+            document.getElementById('rpt-img-sentiment').src = chartInstances[sentId].getDataURL();
+
+            if(isBattleMode) {
+                const langB = LANG_MAP[document.getElementById('langSelectB').value];
+                summary += `\n[${langB}] 样本:${document.getElementById('countB').innerText}, 情感:${document.getElementById('scoreB').innerText}`;
+                
+                document.getElementById('rpt-col-b').style.display = 'block';
+                document.getElementById('rpt-title-b').innerText = langB;
+                document.getElementById('rpt-img-cloud-b').src = chartInstances['wordChartB'].getDataURL();
+                
+                document.getElementById('rpt-lda-box-b').style.display = 'block';
+                document.getElementById('rpt-lda-box-a').style.width = '50%'; 
+                document.getElementById('rpt-lda-title-b').innerText = langB;
+                document.getElementById('rpt-lda-table-b').innerHTML = renderLdaToTable(analysisDataB.lda_topics);
+            } else {
+                document.getElementById('rpt-col-b').style.display = 'none';
+                document.getElementById('rpt-lda-box-b').style.display = 'none';
+                document.getElementById('rpt-lda-box-a').style.width = '100%'; 
+            }
+            document.getElementById('rpt-summary').innerText = summary;
+
+            // 2. 智能分页截图
+            try {
+                const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+                const pageHeight = 290; 
+                let currentHeight = 10; 
+                
+                const sections = template.querySelectorAll('.report-section');
+                
+                for (let i = 0; i < sections.length; i++) {
+                    const section = sections[i];
+                    const canvas = await window.html2canvas(section, {scale: 2});
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                    const imgWidth = 190; 
+                    const imgHeight = canvas.height * imgWidth / canvas.width; // 自动计算高度
+                    
+                    if (currentHeight + imgHeight > pageHeight) {
+                        pdf.addPage();
+                        currentHeight = 10;
+                    }
+                    
+                    pdf.addImage(imgData, 'JPEG', 10, currentHeight, imgWidth, imgHeight);
+                    currentHeight += imgHeight + 5; 
+                }
+                
+                pdf.save(`NEXUS_Report_${game}.pdf`);
+                addLog("PDF 导出成功 (Smart Paging)", "success");
+            } catch(e) { addLog("PDF 失败: "+e.message, "error"); }
+        }
+
+        // --- 常规逻辑 ---
+        function createParticles(x, y) {
+            const colors = ['#22d3ee', '#f472b6', '#34d399', '#facc15'];
+            for(let i=0; i<12; i++) {
+                const p = document.createElement('div'); p.classList.add('particle'); document.body.appendChild(p);
+                p.style.left = x + 'px'; p.style.top = y + 'px'; 
+                p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                const angle = Math.random() * Math.PI * 2; const dist = 50 + Math.random() * 50;
+                p.style.setProperty('--tx', Math.cos(angle) * dist + 'px'); p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+                setTimeout(() => p.remove(), 600);
+            }
+        }
+        function startRotator() {
+            if(rotateInt) clearInterval(rotateInt);
+            rotateInt = setInterval(() => { updateTrendingText((trendIdx + 1) % TRENDS.length); }, 3500);
+        }
+        function updateTrendingText(idx) {
+            trendIdx = idx; const el = document.getElementById('trendingText'); el.style.opacity=0;
+            setTimeout(()=>{el.innerText=TRENDS[trendIdx];el.style.opacity=1;},200);
+        }
+        function manualSwitch(e) {
+            createParticles(e.pageX, e.pageY);
+            clearInterval(rotateInt); updateTrendingText((trendIdx + 1) % TRENDS.length); startRotator();
+        }
+        function applyTrending() {
+            const txt = document.getElementById('trendingText').innerText;
+            document.getElementById('searchInput').value = txt; addLog(`已填入: ${txt}`,"success"); searchGame();
+        }
+        startRotator();
+
+        function downloadDiv(id) {
+            const el = document.getElementById(id);
+            window.html2canvas(el, {backgroundColor: '#0b0c15'}).then(canvas => {
+                const link = document.createElement('a'); link.download = 'LDA_Topics.png';
+                link.href = canvas.toDataURL(); link.click();
+            });
+        }
+
+        function toggleBattleMode() {
+            isBattleMode = document.getElementById('battleModeToggle').checked;
+            document.getElementById('langBContainer').style.display = isBattleMode ? 'block' : 'none';
+            document.getElementById('vsContainer').style.display = isBattleMode ? 'flex' : 'none';
+            document.getElementById('modeLabel').innerText = isBattleMode ? "跨语言对比" : "单语言模式";
+        }
+        function toggleLdaSetting() {
+            const isAuto = document.getElementById('ldaAutoToggle').checked;
+            document.getElementById('ldaManualBox').style.opacity = isAuto ? '0.3' : '1';
+        }
+        function adjustCount(d) { const i = document.getElementById('countInput'); i.value = Math.max(100, (parseInt(i.value)||0)+d); }
+
+        async function searchGame() {
+            const k = document.getElementById('searchInput').value; if(!k) return addLog("请输入游戏名", "error");
+            addLog(`搜索中: ${k}...`);
+            const res = await fetch('/api/search', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keyword:k})});
+            if(res.ok) {
+                const d = await res.json();
+                currentGameId = d.id;
+                document.getElementById('gameName').innerText = d.name; document.getElementById('gameId').innerText = d.id; document.getElementById('gameImg').src = d.img;
+                document.getElementById('gameCard').classList.remove('hidden'); addLog(`已锁定: ${d.name}`, "success");
+            } else { addLog("未找到游戏", "error"); }
+        }
+
+        async function startScrape() {
+            if(!currentGameId) return addLog("请先锁定游戏", "error");
+            const btn = document.getElementById('startBtn'); btn.disabled=true; btn.innerText="正在挖掘...";
+            document.getElementById('placeholder').classList.remove('hidden');
+            document.getElementById('placeholderText').innerText = "正在接入 Steam 神经网络 (Data Mining)...";
+            document.getElementById('dashboard').classList.add('hidden');
+            
+            const count = parseInt(document.getElementById('countInput').value);
+            const langA = document.getElementById('langSelectA').value;
+            const ldaAuto = document.getElementById('ldaAutoToggle').checked;
+            const ldaK = parseInt(document.getElementById('ldaKSlider').value);
+
+            try {
+                const resA = await fetchData(langA, count, ldaAuto, ldaK);
+                scrapedDataA = resA.data; analysisDataA = resA.analysis;
+                
+                if(isBattleMode) {
+                    const langB = document.getElementById('langSelectB').value;
+                    addLog(`启动对比: ${langA} vs ${langB}`);
+                    const resB = await fetchData(langB, count, false, 5);
+                    scrapedDataB = resB.data; analysisDataB = resB.analysis;
+                } else { addLog(`启动分析: ${langA}`); }
+                
+                document.getElementById('placeholder').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                renderDashboard();
+                addLog("分析完成", "success");
+            } catch(e) { addLog(e.message, "error"); document.getElementById('placeholderText').innerText = "任务失败: " + e.message; }
+            finally { btn.disabled=false; btn.innerHTML=`<i class="fas fa-bolt mr-2"></i> 启动全维分析`; }
+        }
+
+        async function fetchData(l, c, a, k) {
+            const r = await fetch('/api/scrape', {
+                method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({app_id:currentGameId.toString(),language:l,count:c,clean_mode:true,lda_auto:a,lda_k:k})
+            });
+            return await r.json();
+        }
+
+        function renderDashboard() {
+            const langA = document.getElementById('langSelectA').value;
+            document.getElementById('ldaTitleA').innerText = `LDA 议题 (${LANG_MAP[langA]||langA})`;
+            updateCard(scrapedDataA, analysisDataA, 'A', langA);
+            renderLda(analysisDataA.lda_topics, 'ldaContainerA');
+            initWordCloud('wordChartA', analysisDataA.keywords);
+
+            if(isBattleMode) {
+                const langB = document.getElementById('langSelectB').value;
+                document.getElementById('ldaTitleB').innerText = `LDA 议题 (${LANG_MAP[langB]||langB})`;
+                document.getElementById('cardPlaytime').classList.add('hidden');
+                document.getElementById('cardB').classList.remove('hidden'); document.getElementById('timeA').classList.remove('hidden');
+                document.getElementById('containerSentimentSingle').classList.add('hidden');
+                document.getElementById('containerCloudB').classList.remove('hidden');
+                document.getElementById('containerSentimentBattle').classList.remove('hidden');
+                document.getElementById('ldaPanelB').classList.remove('hidden');
+                
+                updateCard(scrapedDataB, analysisDataB, 'B', langB);
+                renderLda(analysisDataB.lda_topics, 'ldaContainerB');
+                initWordCloud('wordChartB', analysisDataB.keywords);
+                initTrendChartBattle('trendChart', analysisDataA.trends, analysisDataB.trends, langA, langB);
+                initSentimentBattle('sentimentChartBattle', analysisDataA.sentiment, analysisDataB.sentiment, langA, langB);
+            } else {
+                document.getElementById('cardPlaytime').classList.remove('hidden');
+                document.getElementById('cardB').classList.add('hidden'); document.getElementById('timeA').classList.add('hidden');
+                document.getElementById('containerSentimentSingle').classList.remove('hidden');
+                document.getElementById('containerCloudB').classList.add('hidden');
+                document.getElementById('containerSentimentBattle').classList.add('hidden');
+                document.getElementById('ldaPanelB').classList.add('hidden');
+                
+                document.getElementById('avgPlaytime').innerText = (scrapedDataA.reduce((a,c)=>a+c.playtime,0)/scrapedDataA.length||0).toFixed(1)+'h';
+                initTrendChartSingle('trendChart', analysisDataA.trends);
+                initSentimentPie('sentimentChartSingle', analysisDataA.sentiment);
+            }
+        }
+
+        function updateCard(data, ana, s, l) {
+            document.getElementById('label'+s).innerText = LANG_MAP[l]||l;
+            document.getElementById('count'+s).innerText = data.length;
+            document.getElementById('score'+s).innerText = ((ana.sentiment.positive+ana.sentiment.neutral*0.5)/data.length||0).toFixed(2);
+            document.getElementById('valTime'+s).innerText = (data.reduce((a,c)=>a+c.playtime,0)/data.length||0).toFixed(1)+'h';
+        }
+
+        function renderLda(topics, id) {
+            const el = document.getElementById(id); el.innerHTML = "";
+            topics.forEach((t, i) => {
+                el.innerHTML += `<div class="topic-card"><p class="text-[10px] text-purple-400 font-bold mb-2 flex justify-between"><span>议题 #${i+1}</span>${t.perplexity?`<span class='opacity-50'>P:${t.perplexity}</span>`:''}</p><div>${t.keywords.map(k=>`<span class="topic-keyword">${k}</span>`).join('')}</div></div>`;
+            });
+        }
+
+        function initTrendChartSingle(id, data) {
+            if(chartInstances[id]) chartInstances[id].dispose();
+            const chart = echarts.init(document.getElementById(id)); chartInstances[id] = chart;
+            chart.setOption({
+                tooltip:{trigger:'axis', axisPointer:{type:'cross'}}, toolbox:{feature:{saveAsImage:{show:true,iconStyle:{borderColor:'#fff'}}}},
+                grid:{top:'15%',bottom:'10%'}, legend:{textStyle:{color:'#94a3b8'}, data:['热度','情感']},
+                xAxis:{type:'category',data:data.map(d=>d.date),axisLabel:{color:'#94a3b8'}},
+                yAxis:[{type:'value',name:'评论量',position:'left',axisLabel:{color:'#94a3b8'},splitLine:{lineStyle:{color:'#334155',type:'dashed'}}},{type:'value',name:'情感',position:'right',min:0,max:1,axisLabel:{color:'#10b981'},splitLine:{show:false}}],
+                series:[{name:'热度',type:'bar',data:data.map(d=>d.count),yAxisIndex:0,itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#3b82f6'}, {offset: 1, color: '#1e3a8a'}]) }},{name:'情感',type:'line',yAxisIndex:1,data:data.map(d=>d.avg_sentiment),itemStyle:{color:'#10b981'},lineStyle:{width:3,shadowBlur:10,shadowColor:'#10b981'},smooth:true}]
+            });
+        }
+
+        function initTrendChartBattle(id, dataA, dataB, langA, langB) {
+            if(chartInstances[id]) chartInstances[id].dispose();
+            const chart = echarts.init(document.getElementById(id)); chartInstances[id] = chart;
+            const dates = dataA.map(d=>d.date); const nA=LANG_MAP[langA]||langA; const nB=LANG_MAP[langB]||langB;
+            chart.setOption({
+                tooltip:{trigger:'axis', axisPointer:{type:'cross'}}, toolbox:{feature:{saveAsImage:{show:true,iconStyle:{borderColor:'#fff'}}}},
+                legend:{textStyle:{color:'#fff'}, data:[nA+'热度', nB+'热度', nA+'情感', nB+'情感']},
+                grid:{top:'15%',bottom:'10%'}, xAxis:{type:'category',data:dates,axisLabel:{color:'#94a3b8'}},
+                yAxis:[{type:'value',name:'评论量',position:'left',axisLabel:{color:'#94a3b8'},splitLine:{lineStyle:{color:'#334155',type:'dashed'}}},{type:'value',name:'情感',position:'right',min:0,max:1,axisLabel:{color:'#10b981'},splitLine:{show:false}}],
+                series:[
+                    {name:nA+'热度',type:'bar',data:dataA.map(d=>d.count),yAxisIndex:0,itemStyle:{color:'#f43f5e',opacity:0.3}},
+                    {name:nB+'热度',type:'bar',data:dataB.map(d=>d.count),yAxisIndex:0,itemStyle:{color:'#3b82f6',opacity:0.3}},
+                    {name:nA+'情感',type:'line',data:dataA.map(d=>d.avg_sentiment),yAxisIndex:1,itemStyle:{color:'#f43f5e'},smooth:true,width:3},
+                    {name:nB+'情感',type:'line',data:dataB.map(d=>d.avg_sentiment),yAxisIndex:1,itemStyle:{color:'#3b82f6'},smooth:true,width:3}
+                ]
+            });
+        }
+
+        function initWordCloud(id, data) {
+            const chart = echarts.init(document.getElementById(id)); chartInstances[id] = chart;
+            chart.setOption({ tooltip:{show:true}, toolbox:{feature:{saveAsImage:{show:true,iconStyle:{borderColor:'#fff'}}}}, series:[{type:'wordCloud',top:'20%',width:'95%',height:'80%',sizeRange:[12,50],rotationRange:[-45,90],textStyle:{fontFamily:'sans-serif',fontWeight:'bold',color:()=>['#f472b6','#22d3ee','#34d399'][Math.floor(Math.random()*3)]},data:data}] });
+        }
+        function initSentimentPie(id, s) {
+            const chart = echarts.init(document.getElementById(id)); chartInstances[id] = chart;
+            chart.setOption({ tooltip:{trigger:'item'}, toolbox:{feature:{saveAsImage:{show:true,iconStyle:{borderColor:'#fff'}}}}, legend:{bottom:'0%',textStyle:{color:'#94a3b8'}}, series:[{type:'pie',radius:['40%','70%'],data:[{value:s.positive,name:'正面',itemStyle:{color:'#10b981'}},{value:s.neutral,name:'中立',itemStyle:{color:'#64748b'}},{value:s.negative,name:'负面',itemStyle:{color:'#ef4444'}}]}] });
+        }
+        function initSentimentBattle(id, sA, sB, lA, lB) {
+            const chart = echarts.init(document.getElementById(id)); chartInstances[id] = chart;
+            const nA=LANG_MAP[lA]||lA, nB=LANG_MAP[lB]||lB;
+            chart.setOption({ tooltip:{trigger:'axis'}, toolbox:{feature:{saveAsImage:{show:true,iconStyle:{borderColor:'#fff'}}}}, legend:{textStyle:{color:'#94a3b8'}}, xAxis:{type:'value'}, yAxis:{type:'category',data:['正面','中立','负面']}, series:[{name:nA,type:'bar',data:[sA.positive,sA.neutral,sA.negative],itemStyle:{color:'#f43f5e'}},{name:nB,type:'bar',data:[sB.positive,sB.neutral,sB.negative],itemStyle:{color:'#3b82f6'}}] });
+        }
+        function downloadCSV(){
+            if(scrapedDataA.length===0) return addLog("无数据", "error");
+            const headers = Object.keys(scrapedDataA[0]);
+            const csv = [headers.join(','), ...scrapedDataA.map(r => headers.map(f => `"${String(r[f]).replace(/"/g, '""')}"`).join(','))].join('\n');
+            const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob(["\ufeff"+csv], {type: 'text/csv'})); link.download = `Data_${currentGameId}.csv`; link.click();
+        }
+        window.addEventListener('resize', () => { Object.values(chartInstances).forEach(c => c.resize()); });
+    </script>
+</body>
+</html>

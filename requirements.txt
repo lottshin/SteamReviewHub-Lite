@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+requests
+pydantic
+snownlp
+textblob
+langdetect
+jieba
+nltk
+scikit-learn
+numpy
+scipy
