@@ -2,11 +2,7 @@ fastapi
 uvicorn
 requests
 pydantic
-snownlp
-textblob
-langdetect
 jieba
-nltk
+snownlp
 scikit-learn
 numpy
-scipy
